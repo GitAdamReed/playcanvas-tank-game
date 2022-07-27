@@ -1,7 +1,7 @@
 # playcanvas-tank-game
 
 **IMPORTANT**<br>
-Due to the CORS policy of most modern web-browsers, the images in this project will be blocked. To run correctly, you must install and run a server such as a WAMP server like Uniform Server.<br>
+Due to the CORS policy of most modern web-browsers, the game will not run. To run correctly, you must install and run a server such as a WAMP server like Uniform Server.<br>
 
 <a href="https://www.uniformserver.com/">Uniform Server Website</a><br>
 <a href="https://sourceforge.net/projects/miniserver/">Uniform Server Download</a><br>
