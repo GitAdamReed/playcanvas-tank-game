@@ -1,5 +1,8 @@
 # playcanvas-tank-game
 
+**PlayCanvas Version**<br>
+0.219.0-dev
+
 **IMPORTANT**<br>
 Due to the CORS policy of most modern web-browsers, the game will not run. To run correctly, you must install and run a server such as a WAMP server like Uniform Server.<br>
 
