@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Tanks</title>
+    <script src="playcanvas-engine/build/output/playcanvas-latest.js"></script>
+    <script src="http://code.playcanvas.com/ammo.751ec5f.js"></script>
+    <link href="style.css" rel="stylesheet" />
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        var canvas = document.getElementById("gameCanvas");
+
+        // Create the application, attach a keyboard event handler to the window and start the update loop
+        var app = new pc.Application(canvas, {
+            keyboard: new pc.Keyboard(window)
+        });
+        app.start();
+
+        // Set the canvas to fill the window and automatically change resolution to be the same as the canvas size
+        app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
+        app.setCanvasResolution(pc.RESOLUTION_AUTO);
+
+        // Set the ambient light
+        app.scene.ambientLight = new pc.Color(0.2, 0.2, 0.2);
+
+        // Create a directional light
+        var dirLight = new pc.Entity();
+        dirLight.addComponent("light", {
+            type: "directional",
+            color: new pc.Color(1, 1, 1),
+            castShadows: true
+        });
+        dirLight.translate(0, 5, 0);
+
+        // Create a red material
+        var red = new pc.PhongMaterial();
+        red.diffuse = new pc.Color(1, 0, 0);
+        red.update();
+
+        // Create a grey material
+        var grey = new pc.PhongMaterial();
+        grey.diffuse = new pc.Color().fromString("#757474");
+        grey.update();
+
+        // Create an Entity with a camera component
+        var cameraEntity = new pc.Entity();
+        cameraEntity.addComponent("camera", {
+            clearColor: new pc.Color(0.5, 0.5, 0.8),
+            priority: 1
+        });
+        cameraEntity.translate(25, 7.5, 0);
+        //cameraEntity.setLocalEulerAngles(90, 0, 0);
+        cameraEntity.lookAt(0, 0 ,0);
+
+        //app.root.addChild(cameraEntity);
+
+        // Create a floor
+        var floor = new pc.Entity();
+        floor.addComponent("model", {
+            type: "box"
+        });
+        floor.model.material = red;
+        floor.addComponent("rigidbody", {
+            type: "static",
+            resitution: 0.5
+        });
+        floor.addComponent("collision", {
+            type: "box",
+            halfExtents: new pc.Vec3(5, 0.5, 5)
+        });
+        floor.setLocalScale(40, 1, 40);
+        app.root.addChild(floor);
+
+        var Movement = pc.createScript("tankMovement");
+        
+        Movement.prototype.initialize = function () {
+            this.force = 5;
+            this.adjust = 0.1;
+            this.app.keyboard.on(pc.EVENT_KEYDOWN, this.onKeyDown, this);
+        }
+
+        Movement.prototype.onKeyDown = function (event) {
+            event.event.preventDefault();
+        }
+
+        Movement.prototype.reset = function () {
+            this.entity.rigidbody.teleport(0, 0.5, 8);
+            this.entity.rigidbody.linearVelocity = pc.Vec3.ZERO;
+            this.entity.rigidbody.angularVelocity = pc.Vec3.ZERO;
+        }
+
+        Movement.prototype.update = function (dt) {
+            this.rotation = this.entity.getLocalEulerAngles();
+            this.pos = this.entity.getLocalPosition();
+            this.xVelocity = this.entity.rigidbody.linearVelocity.x;
+            this.zVelocity = this.entity.rigidbody.linearVelocity.z;
+            
+            this.entity.rigidbody.applyForce(0, 9.8, 0);
+
+            if (this.rotation.x > 2 && this.rotation.z > 2) {
+                this.entity.rigidbody.angularDamping = 1;
+                this.entity.rigidbody.applyTorque(-this.adjust, 0, 0);
+            }
+            else {
+                this.entity.rigidbody.angularDamping = 100;
+            }
+
+            if (this.rotation.x < -2 && this.rotation.z < -2) {
+                this.entity.rigidbody.angularDamping = 1;
+                this.entity.rigidbody.applyTorque(this.adjust, 0, 0);
+            }
+            else {
+                this.entity.rigidbody.angularDamping = 100;
+            }
+
+            if (this.pos.y < 0.5 && this.pos.y > 0.5) {
+                this.entity.rigidbody.linearFactor = new pc.Vec3(1, 0.1, 1);
+            }
+            if (this.pos.y > 0.5) {
+                this.entity.rigidbody.applyForce(0, -this.adjust, 0);
+            }
+            if (this.pos.y < 0.5) {
+                this.entity.rigidbody.applyForce(0, this.adjust, 0);
+            }
+
+            if (this.app.keyboard.isPressed(pc.KEY_W)) {
+                this.entity.rigidbody.applyForce(0, 0, this.force);
+            }
+            if (this.app.keyboard.isPressed(pc.KEY_A)) {
+                this.entity.rigidbody.applyForce(this.force, 0, 0);
+            }
+            if (this.app.keyboard.isPressed(pc.KEY_S)) {
+                this.entity.rigidbody.applyForce(0, 0, -this.force);
+            }
+            if (this.app.keyboard.isPressed(pc.KEY_D)) {
+                this.entity.rigidbody.applyForce(-this.force, 0, 0);
+            }
+
+            if (this.app.keyboard.isPressed(pc.KEY_X)) {
+                this.entity.rigidbody.linearVelocity = pc.Vec3.ZERO;
+            }
+
+            if (this.app.keyboard.wasPressed(pc.KEY_R)) {
+                this.reset();
+            }
+        }
+
+        var RotateTurret = pc.createScript("rotateTurret");
+
+        RotateTurret.prototype.initialize = function () {
+            // The right and left variables are used as a reference to
+            // the X-axis and negative X-axis
+            this.right = new pc.Vec3();
+            this.left = new pc.Vec3();
+            this.initialForward = this.entity.forward;
+            this.forward = new pc.Vec3();
+            this.mul = new pc.Vec3(-1, -1, -1);
+            this.upLimit = 30;
+            this.turretAngles = new pc.Vec3();
+            this.verticalAngle = new pc.Vec3();
+            this.verticalAngleLimit = new pc.Vec3(30, 0, 30);
+            this.app.keyboard.on(pc.EVENT_KEYDOWN, this.onKeyDown, this);
+            this.app.keyboard.on(pc.EVENT_KEYUP, this.onKeyUp, this);
+        }
+
+        RotateTurret.prototype.update = function (dt) {
+            this.right = this.entity.right;
+            this.left.mul2(this.right, this.mul);
+            this.foward = this.entity.foward;
+            this.turretAngles = this.entity.getLocalEulerAngles();
+            this.verticalAngle.sub2(this.initialForward, this.forward);
+            if (this.app.keyboard.isPressed(pc.KEY_LEFT)) {
+                this.entity.rotate(0, 1, 0);
+            }
+            if (this.app.keyboard.isPressed(pc.KEY_RIGHT)) {
+                this.entity.rotate(0, -1, 0);
+            }
+            if (this.app.keyboard.isPressed(pc.KEY_UP) && this.verticalAngle.z < this.upLimit) {
+                this.entity.rotate(this.left);
+            }
+            if (this.app.keyboard.isPressed(pc.KEY_DOWN)) {
+                this.entity.rotate(this.right);
+            }
+        }
+
+        var DestroyTarget = pc.createScript("destroyTarget");
+
+        DestroyTarget.prototype.initialize = function () {
+            this.entity.collision.on("triggerenter", this.onTriggerEnter, this);
+        }
+
+        DestroyTarget.prototype.onTriggerEnter = function (entity) {
+            if (entity.name == "tankShell") {
+                this.entity.destroy();
+                //this.entity.removeChild(this.entity.findByName("target"));
+                //window.alert(this.entity.children.isDescendantOf(this.entity));
+                //window.alert(this.entity.findByName("target").name);
+                window.alert("Hit");
+            }
+            // Add a counter for score
+        }
+        
+        var FireCannon = pc.createScript("fireCannon");
+
+        FireCannon.prototype.initialize = function () {
+            var entity = this.entity;
+            var turretRotation;
+            var turretPosition;
+            var barrelRotation;
+            var barrelPosition;
+            this.shellSpeed = -20;
+            this.impulse = new pc.Vec3();
+            // Create a barrel entity to spawn shells from
+            this.barrel = new pc.Entity();
+            this.barrel.setLocalPosition(0, 0, 2);
+            /*barrel.addComponent("model", {
+                type: "box"
+            });*/
+            entity.addChild(this.barrel);
+            this.app.keyboard.on(pc.EVENT_KEYDOWN, this.onKeyDown, this);
+        }
+
+        FireCannon.prototype.fire = function (impulse) {
+            var tankShell = new pc.Entity();
+            tankShell.name = "tankShell";
+            tankShell.addComponent("model", {
+                type: "sphere",
+                castShadows: true
+            });
+            tankShell.addComponent("rigidbody", {
+                type: "dynamic",
+                mass: 0.5
+            });
+            tankShell.addComponent("collision", {
+                type: "sphere",
+                radius: 0.2
+            });
+            tankShell.model.material = grey;
+            tankShell.setLocalScale(0.5, 0.5, 0.5);
+            tankShell.setPosition(barrelPosition);
+            tankShell.setLocalEulerAngles(barrelRotation);
+            app.root.addChild(tankShell);
+            tankShell.rigidbody.applyImpulse(impulse);
+        }
+
+        FireCannon.prototype.update = function (dt) {
+            turretRotation = this.entity.getLocalEulerAngles();
+            turretPosition = this.entity.getPosition();
+            barrelRotation = this.entity.getLocalEulerAngles();
+            barrelPosition = this.barrel.getPosition();
+            this.impulse = this.impulse.copy(this.barrel.forward).scale(this.shellSpeed);
+
+            if (this.app.keyboard.wasPressed(pc.KEY_SPACE)) {
+                FireCannon.prototype.fire(this.impulse);
+            }
+        }
+
+        var SpawnEnemy = pc.createScript("spawnEnemy");
+        
+        SpawnEnemy.prototype.initialize = function () {
+            this.timer = 0;
+            this.calc = 0;
+            this.respawnRate = 500;
+            this.count = 0;
+            this.randX = 0;
+            this.randY = 0;
+            this.randZ = 0;
+            this.target = new pc.Entity();
+            this.clone = new pc.Entity();
+            this.target.name = "target";
+            this.target.addComponent("model", {
+                type: "box",
+                castShadows: true
+            });
+            this.target.model.material = grey;
+            /*this.target.addComponent("rigidbody", {
+                type: "kinematic",
+                resitution: 0.5
+            });*/
+            this.target.addComponent("collision", {
+                type: "box"
+            });
+            this.target.addComponent("script");
+            this.target.script.create("destroyTarget");
+            //this.target.setPosition(0, 2, 5);
+        }
+
+        SpawnEnemy.prototype.update = function (dt) {
+            this.timer += dt;
+            this.timer = Math.ceil(this.timer);
+            this.calc = this.timer % this.respawnRate;
+            //console.log(this.timer);
+            if (this.count == 0 && this.calc == 0) {
+                this.randX = Math.floor((Math.random() * 21) - 20);
+                this.randZ = Math.floor((Math.random() * 21) - 20);
+                if (this.randX > -20 && this.randZ < 20) {
+                    this.randY = Math.floor((Math.random() * 4) + 2)
+                }
+                else {
+                    this.randY = Math.floor((Math.random() * 8) + 2);
+                }
+                this.clone = this.target.clone();
+                this.clone.setPosition(this.randX, this.randY, this.randZ);
+                this.entity.addChild(this.clone);
+            }
+        }
+
+        // Create the tank base and tank turret entities
+        var tank, tankTurret;
+        tank = new pc.Entity();
+        tankTurret = new pc.Entity();
+
+        // Load the tank base and tank turret assets
+        var tankBaseURL = "Assets/Tank_base/Tank_base.json";
+        var tankTurretURL = "Assets/Tank_gun_turret/Tank_gun_turret.json";
+
+        app.assets.loadFromUrl(tankBaseURL, "model", function (err, asset) {
+            tank.name = "tankBase";
+            tank.addComponent("model");
+            tank.model.model = asset.resource;
+            tank.addComponent("rigidbody", {
+                type: "dynamic",
+                resitution: 0.2,
+                angularDamping: 100
+            });
+            tank.addComponent("collision", {
+                type: "mesh",
+                model: tank.model.model
+            });
+            tank.addComponent("script");
+            tank.script.create("tankMovement");
+            tank.setLocalScale(2, 2, 2);
+            //tank.setEulerAngles(0, 180, 0);
+            this.app.root.addChild(tank);
+            app.assets.loadFromUrl(tankTurretURL, "model", function (err, asset) {
+                tankTurret.name = "tankTurret";
+                tankTurret.addComponent("model");
+                tankTurret.model.model = asset.resource;
+                /*tankTurret.addComponent("light", {
+                    type: "spot",
+                    color: new pc.Color(0.2, 0.2, 0.2),
+                    range: 10,
+                    castShadows: true
+                });*/
+                var turretCamera = new pc.Entity();
+                turretCamera.addComponent("camera", {
+                    clearColor: new pc.Color(0.5, 0.5, 0.8),
+                    priority: 0
+                });
+                turretCamera.translate(1, 0.5, -2);
+                turretCamera.rotate(-15, 180, 0);
+                tankTurret.addComponent("script");
+                tankTurret.script.create("rotateTurret");
+                //tankTurret.addComponent("script");
+                tankTurret.script.create("fireCannon");
+                tankTurret.translate(0, 0.5, 0);
+                this.tank.addChild(tankTurret);
+                this.tankTurret.addChild(turretCamera);
+            });
+        });
+
+        var spawnPoint = new pc.Entity();
+        spawnPoint.addComponent("script");
+        spawnPoint.script.create("spawnEnemy");
+        spawnPoint.setPosition(0, 2, 5);
+        app.root.addChild(spawnPoint);
+
+        var box = new pc.Entity();
+        box.name = "target";
+        box.addComponent("model", {
+            type: "box",
+            castShadows: true
+        });
+        box.model.material = grey;
+        box.addComponent("collision", {
+            type: "box"
+        });
+        box.addComponent("script");
+        box.script.create("destroyTarget");
+        box.translate(0, 2, 5);
+        //app.root.addChild(box);
+
+        /*var testSphere = new pc.Entity();
+        testSphere.addComponent("model", {
+            type: "sphere",
+            castShadows: true
+        });
+        testSphere.addComponent("rigidbody", {
+            type: "dynamic"
+        });
+        testSphere.addComponent("collision", {
+            type: "sphere",
+            radius: 0.5
+        });
+        testSphere.model.material = grey;
+        this.app.root.addChild(testSphere);
+        testSphere.rigidbody.teleport(0, 5, 0);*/
+    </script>
+</body>
+</html>
